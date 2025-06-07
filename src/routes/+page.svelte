@@ -1,30 +1,143 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
+  function isTauri(): boolean {
+    return '__TAURI_METADATA__' in window;
+  }
+
   let isDrawing = false;
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null = null;
 
+  type Point = [number, number];
+
+  interface Line {
+    points: Point[];
+    color: string;
+    width: number;
+  }
+
+  let currentLine: Point[] = [];
+  let lines: Line[] = [];
+  let drawingColor = '#000000';
+  let lineWidth = 2;
+
   function startDrawing(e: MouseEvent) {
     if (!ctx) return;
     isDrawing = true;
+    currentLine = [[e.offsetX, e.offsetY]];
     ctx.beginPath();
     ctx.moveTo(e.offsetX, e.offsetY);
   }
 
   function draw(e: MouseEvent) {
     if (!isDrawing || !ctx) return;
+    currentLine.push([e.offsetX, e.offsetY]);
     ctx.lineTo(e.offsetX, e.offsetY);
     ctx.stroke();
   }
 
   function stopDrawing() {
-    isDrawing = false;
+    if (isDrawing) {
+      isDrawing = false;
+      lines.push({
+        points: currentLine,
+        color: drawingColor,
+        width: lineWidth,
+      });
+    }
   }
 
   function clearCanvas() {
     if (ctx && canvas) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      lines = [];
+    }
+  }
+
+  function redrawFromLines() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (const line of lines) {
+      if (line.points.length === 0) continue;
+
+      ctx.beginPath();
+      ctx.strokeStyle = line.color;
+      ctx.lineWidth = line.width;
+
+      ctx.moveTo(line.points[0][0], line.points[0][1]);
+      for (const [x, y] of line.points.slice(1)) {
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // restore default style
+    ctx.strokeStyle = drawingColor;
+    ctx.lineWidth = lineWidth;
+  }
+
+  async function saveWhiteboard() {
+    const json = JSON.stringify(lines, null, 2);
+
+    if (isTauri()) {
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      const { save } = await import('@tauri-apps/plugin-dialog');
+
+      const file = await save({
+        defaultPath: 'whiteboard.json',
+        filters: [{ name: 'Whiteboard', extensions: ['json'] }]
+      });
+
+      if (file) {
+        await writeTextFile(file, json);
+        alert('Saved!');
+      }
+    } else {
+      // Web fallback
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'whiteboard.json';
+      a.click();
+
+      URL.revokeObjectURL(url);
+      alert('Saved!');
+    }
+  }
+
+    async function loadWhiteboard() {
+    if (isTauri()) {
+      const { readTextFile } = await import('@tauri-apps/plugin-fs');
+      const { open } = await import('@tauri-apps/plugin-dialog');
+
+      const file = await open({
+        multiple: false,
+        filters: [{ name: 'Whiteboard', extensions: ['json'] }]
+      });
+
+      if (file && typeof file === 'string') {
+        const content = await readTextFile(file);
+        lines = JSON.parse(content);
+        redrawFromLines();
+      }
+    } else {
+      // Browser fallback: trigger file input
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async () => {
+        if (!input.files || input.files.length === 0) return;
+
+        const file = input.files[0];
+        const text = await file.text();
+        lines = JSON.parse(text);
+        redrawFromLines();
+      };
+      input.click();
     }
   }
 
@@ -56,7 +169,11 @@
     on:mouseleave={stopDrawing}
     class="whiteboard"></canvas>
 
-  <button on:click={clearCanvas} class="clear-button">🧹 Clear</button>
+  <nav>
+    <button on:click={clearCanvas} class="clear-button">🧹 Clear</button>
+    <button on:click={saveWhiteboard}>💾 Save JSON</button>
+    <button on:click={loadWhiteboard}>📂 Load JSON</button>
+  </nav>
 </main>
 
 <style>
@@ -70,11 +187,16 @@
     z-index: 0;
   }
 
-  .clear-button {
+  nav {
     position: fixed;
+    z-index: 1;
     top: 10px;
     left: 10px;
-    z-index: 1;
+    display: flexbox;
+    gap: 5px;
+  }
+
+  nav button {
     background: #eee;
     border: 1px solid #ccc;
     padding: 0.5rem;
