@@ -1,9 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getVersion } from '@tauri-apps/api/app';
 
-  function isTauri(): boolean {
-    return '__TAURI_METADATA__' in window;
+  async function isTauri(): Promise<boolean> {
+    try {
+      await getVersion();
+      return true;
+    } catch {
+      return false;
+    }
   }
+
 
   let isDrawing = false;
   let canvas: HTMLCanvasElement;
@@ -79,37 +86,39 @@
   }
 
   async function saveWhiteboard() {
-    const json = JSON.stringify(lines, null, 2);
-
     if (isTauri()) {
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-      const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    const { save } = await import('@tauri-apps/plugin-dialog');
 
-      const file = await save({
-        defaultPath: 'whiteboard.json',
-        filters: [{ name: 'Whiteboard', extensions: ['json'] }]
-      });
+    const file = await save({
+      title: 'Save Whiteboard',
+      defaultPath: 'whiteboard.json',
+      filters: [{ name: 'Whiteboard', extensions: ['json'] }]
+    });
 
-      if (file) {
-        await writeTextFile(file, json);
-        alert('Saved!');
-      }
-    } else {
+    if (file) {
+      await writeTextFile(file, JSON.stringify(lines, null, 2));
+      alert(`Saved to ${file}`);
+    }
+  } else {
       // Web fallback
-      const blob = new Blob([json], { type: 'application/json' });
+      const defaultName = prompt('Enter a filename', 'whiteboard.json');
+      if (!defaultName) return;
+
+      const blob = new Blob([JSON.stringify(lines, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
 
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'whiteboard.json';
+      a.download = defaultName;
       a.click();
 
       URL.revokeObjectURL(url);
-      alert('Saved!');
+      alert(`Saved as ${defaultName}`);
     }
   }
 
-    async function loadWhiteboard() {
+  async function loadWhiteboard() {
     if (isTauri()) {
       const { readTextFile } = await import('@tauri-apps/plugin-fs');
       const { open } = await import('@tauri-apps/plugin-dialog');
@@ -154,6 +163,7 @@
   }
 
   onMount(() => {
+    console.log('Running in Tauri?', isTauri());
     initCanvas();
     window.addEventListener('resize', initCanvas);
     return () => window.removeEventListener('resize', initCanvas);
