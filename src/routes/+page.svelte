@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
+  import { listen } from '@tauri-apps/api/event';
 
   async function isTauri(): Promise<boolean> {
     try {
@@ -162,8 +163,23 @@
     }
   }
 
+  async function listenPeer() {
+    if (await isTauri()) {
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<string>('peer-discovered', (event) => {
+        const peer = event.payload;
+        console.log('Discovered peer:', peer);
+        // Handle peer
+      });
+    });
+    } else {
+      // Peer discovery in browser will be implemented later
+      console.warn('Tauri environment not detected — peer discovery is disabled in the browser.');
+    }
+  }
+
   onMount(() => {
-    console.log('Running in Tauri?', isTauri());
+    listenPeer();
     initCanvas();
     window.addEventListener('resize', initCanvas);
     return () => window.removeEventListener('resize', initCanvas);
