@@ -86,7 +86,7 @@
   }
 
   async function saveWhiteboard() {
-    if (isTauri()) {
+    if (await isTauri()) {
     const { writeTextFile } = await import('@tauri-apps/plugin-fs');
     const { save } = await import('@tauri-apps/plugin-dialog');
 
@@ -119,7 +119,7 @@
   }
 
   async function loadWhiteboard() {
-    if (isTauri()) {
+    if (await isTauri()) {
       const { readTextFile } = await import('@tauri-apps/plugin-fs');
       const { open } = await import('@tauri-apps/plugin-dialog');
 
