@@ -3,15 +3,7 @@
   import { getVersion } from '@tauri-apps/api/app';
   import { listen } from '@tauri-apps/api/event';
 
-  async function isTauri(): Promise<boolean> {
-    try {
-      await getVersion();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
+  import { invoke, isTauri } from '@tauri-apps/api/core';
 
   let isDrawing = false;
   let canvas: HTMLCanvasElement;
@@ -87,7 +79,7 @@
   }
 
   async function saveWhiteboard() {
-    if (await isTauri()) {
+    if (isTauri()) {
     const { writeTextFile } = await import('@tauri-apps/plugin-fs');
     const { save } = await import('@tauri-apps/plugin-dialog');
 
@@ -164,7 +156,7 @@
   }
 
   async function listenPeer() {
-    if (await isTauri()) {
+    if (isTauri()) {
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen<string>('peer-discovered', (event) => {
         const peer = event.payload;
